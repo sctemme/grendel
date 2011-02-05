@@ -1,2 +1,2 @@
 #!/bin/bash
-curl -v "http://0.0.0.0:8080/users/" && echo
+curl -v "http://127.0.0.1:8080/users/" && echo

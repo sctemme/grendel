@@ -8,7 +8,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyPair;
@@ -18,6 +17,7 @@ import org.bouncycastle.openpgp.PGPSignatureSubpacketGenerator;
 import org.bouncycastle.openpgp.PGPSignatureSubpacketVector;
 import org.joda.time.DateTime;
 
+import com.wesabe.grendel.util.CipherUtil;
 import com.google.inject.Inject;
 import com.google.inject.internal.ImmutableList;
 import com.wesabe.grendel.util.IntegerEquivalents;
@@ -54,8 +54,41 @@ public class KeySetGenerator {
 		}
 	}
 	
-	private final SecureRandom random;
-	private final ExecutorService executor;
+	/**
+	 * @author Cesar Arevalo
+	 */
+	public static class KeyPairHolder {
+		private static final SecureRandom RANDOM = new SecureRandom();
+		private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
+		public static final KeyPair MASTER_KEY_PAIR = getMasterKeyPair();
+		public static final KeyPair SUB_KEY_PAIR = getSubKeyPair();
+		
+		private static KeyPair getMasterKeyPair() {
+			if (MASTER_KEY_PAIR == null) {
+				try {
+					return EXECUTOR.submit(new GeneratorTask(AsymmetricAlgorithm.SIGNING_DEFAULT, RANDOM)).get();
+				} catch (InterruptedException e) {
+					throw new RuntimeException(e);
+				} catch (ExecutionException e) {
+					throw new RuntimeException(e);
+				}
+			}
+			return MASTER_KEY_PAIR;
+		}
+		
+		private static KeyPair getSubKeyPair() {
+			if (SUB_KEY_PAIR == null) {
+				try {
+					return EXECUTOR.submit(new GeneratorTask(AsymmetricAlgorithm.ENCRYPTION_DEFAULT, RANDOM)).get();
+				} catch (InterruptedException e) {
+					throw new RuntimeException(e);
+				} catch (ExecutionException e) {
+					throw new RuntimeException(e);
+				}
+			}
+			return SUB_KEY_PAIR;
+		}
+	}
 	
 	/**
 	 * Creates a new {@link KeySetGenerator}.
@@ -64,8 +97,6 @@ public class KeySetGenerator {
 	 */
 	@Inject
 	public KeySetGenerator(SecureRandom random) {
-		this.random = random;
-		this.executor = Executors.newCachedThreadPool();
 	}
 	
 	/**
@@ -78,16 +109,9 @@ public class KeySetGenerator {
 	 */
 	public KeySet generate(String userId, char[] passphrase) throws CryptographicException {
 		try {
-			final Future<KeyPair> masterKeyPair = generateKeyPair(
-				AsymmetricAlgorithm.SIGNING_DEFAULT
-			);
-			final Future<KeyPair> subKeyPair = generateKeyPair(
-				AsymmetricAlgorithm.ENCRYPTION_DEFAULT
-			);
-
 			final PGPKeyPair masterPGPKeyPair = new PGPKeyPair(
 				AsymmetricAlgorithm.SIGNING_DEFAULT.toInteger(),
-				masterKeyPair.get(),
+				KeyPairHolder.MASTER_KEY_PAIR,
 				new DateTime().toDate()
 			);
 
@@ -96,17 +120,17 @@ public class KeySetGenerator {
 				masterPGPKeyPair,
 				userId,
 				SymmetricAlgorithm.DEFAULT.toInteger(),
-				passphrase,
+				CipherUtil.xor(passphrase),
 				true, // use SHA-1 instead of MD5
 				generateMasterKeySettings(),
 				null, // don't store any key settings unhashed
-				random,
+				KeyPairHolder.RANDOM,
 				"BC"
 			);
 
 			final PGPKeyPair subPGPKeyPair = new PGPKeyPair(
 				AsymmetricAlgorithm.ENCRYPTION_DEFAULT.toInteger(),
-				subKeyPair.get(),
+				KeyPairHolder.SUB_KEY_PAIR,
 				new DateTime().toDate()
 			);
 
@@ -118,10 +142,6 @@ public class KeySetGenerator {
 		} catch (GeneralSecurityException e) {
 			throw new CryptographicException(e);
 		} catch (PGPException e) {
-			throw new CryptographicException(e);
-		} catch (InterruptedException e) {
-			throw new CryptographicException(e);
-		} catch (ExecutionException e) {
 			throw new CryptographicException(e);
 		}
 	}
@@ -153,9 +173,5 @@ public class KeySetGenerator {
 				)
 		);
 		return settings.generate();
-	}
-
-	private Future<KeyPair> generateKeyPair(final AsymmetricAlgorithm algorithm) {
-		return executor.submit(new GeneratorTask(algorithm, random));
 	}
 }

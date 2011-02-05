@@ -9,6 +9,7 @@ import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 
+import com.wesabe.grendel.util.CipherUtil;
 import com.wesabe.grendel.representations.UpdateUserRepresentation;
 import com.wesabe.grendel.representations.ValidationException;
 
@@ -21,7 +22,7 @@ public class UpdateUserRepresentationTest {
 		public void setup() throws Exception {
 			this.req = new UpdateUserRepresentation();
 			
-			req.setPassword("happenstance".toCharArray());
+			req.setPassword(CipherUtil.xor("happenstance".toCharArray()));
 		}
 		
 		@Test
@@ -81,7 +82,7 @@ public class UpdateUserRepresentationTest {
 			final ObjectMapper mapper = new ObjectMapper();
 			final UpdateUserRepresentation rep = mapper.readValue(json, UpdateUserRepresentation.class);
 			
-			assertThat(rep.getPassword()).isEqualTo("hoohah".toCharArray());
+			assertThat(rep.getPassword()).isEqualTo(CipherUtil.xor("hoohah".toCharArray()));
 		}
 	}
 }

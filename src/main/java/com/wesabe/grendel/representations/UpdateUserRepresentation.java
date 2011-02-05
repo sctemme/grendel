@@ -5,6 +5,8 @@ import java.util.Arrays;
 import org.codehaus.jackson.annotate.JsonGetter;
 import org.codehaus.jackson.annotate.JsonSetter;
 
+import com.wesabe.grendel.util.CipherUtil;
+
 /**
  * A representation of a request to change a user's password.
  * <p>
@@ -29,6 +31,7 @@ public class UpdateUserRepresentation implements Validatable {
 	
 	@JsonSetter("password")
 	public void setPassword(char[] password) {
+		password = CipherUtil.xor(password);
 		this.password = Arrays.copyOf(password, password.length);
 		Arrays.fill(password, '\0');
 	}

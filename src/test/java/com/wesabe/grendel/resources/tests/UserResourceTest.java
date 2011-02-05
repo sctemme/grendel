@@ -27,6 +27,7 @@ import org.mockito.InOrder;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import com.wesabe.grendel.util.CipherUtil;
 import com.google.inject.Provider;
 import com.wesabe.grendel.auth.Credentials;
 import com.wesabe.grendel.auth.Session;
@@ -73,7 +74,6 @@ public class UserResourceTest {
 			
 			this.random = mock(SecureRandom.class);
 			this.dao = mock(UserDAO.class);
-			when(dao.findById("bob")).thenReturn(user);
 			
 			this.credentials = mock(Credentials.class);
 			when(credentials.getPassword()).thenReturn("secret");
@@ -151,7 +151,7 @@ public class UserResourceTest {
 			when(request.evaluatePreconditions(any(Date.class), any(EntityTag.class))).thenReturn(Response.notModified());
 			
 			try {
-				resource.delete(request, uriInfo, "bob");
+				resource.delete(request, uriInfo, credentials, "bob");
 			} catch (WebApplicationException e) {
 				assertThat(e.getResponse().getStatus()).isEqualTo(Status.NOT_MODIFIED.getStatusCode());
 			}
@@ -161,13 +161,13 @@ public class UserResourceTest {
 		
 		@Test
 		public void itChecksPreconditions() throws Exception {
-			resource.delete(request, uriInfo, "bob");
+			resource.delete(request, uriInfo, credentials, "bob");
 			verify(request).evaluatePreconditions(modifiedAt.toDate(), new EntityTag("user-bob-4"));
 		}
 		
 		@Test
 		public void itDeletesTheUserIfValid() throws Exception {
-			final Response response = resource.delete(request, uriInfo, "bob");
+			final Response response = resource.delete(request, uriInfo, credentials, "bob");
 			assertThat(response.getStatus()).isEqualTo(Status.NO_CONTENT.getStatusCode());
 
 			verify(dao).delete(user);
@@ -190,7 +190,7 @@ public class UserResourceTest {
 			).thenReturn(newKeySet);
 
 			this.entity = new UpdateUserRepresentation();
-			entity.setPassword("woohoo".toCharArray());
+			entity.setPassword(CipherUtil.xor("woohoo".toCharArray()));
 		}
 		
 		@Test

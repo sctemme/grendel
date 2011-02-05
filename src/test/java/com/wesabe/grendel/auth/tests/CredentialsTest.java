@@ -13,6 +13,7 @@ import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 
+import com.wesabe.grendel.util.CipherUtil;
 import com.wesabe.grendel.auth.Credentials;
 import com.wesabe.grendel.auth.Session;
 import com.wesabe.grendel.entities.User;
@@ -38,7 +39,7 @@ public class CredentialsTest {
 		
 		@Test
 		public void itHasAPassword() throws Exception {
-			assertThat(creds.getPassword()).isEqualTo("hah");
+			assertThat(creds.getPassword()).isEqualTo(new String(CipherUtil.xor("hah")));
 		}
 	}
 	
@@ -102,7 +103,7 @@ public class CredentialsTest {
 				creds.buildSession(userDAO);
 			} catch (WebApplicationException e) {}
 			
-			verify(keySet).unlock("hah".toCharArray());
+			verify(keySet).unlock(CipherUtil.xor("hah"));
 		}
 		
 		@Test
@@ -129,7 +130,7 @@ public class CredentialsTest {
 				creds.buildSession(userDAO);
 			} catch (WebApplicationException e) {}
 			
-			verify(keySet).unlock("hah".toCharArray());
+			verify(keySet).unlock(CipherUtil.xor("hah"));
 		}
 		
 		@Test

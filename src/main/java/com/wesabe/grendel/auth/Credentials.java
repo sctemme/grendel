@@ -5,6 +5,7 @@ import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
+import com.wesabe.grendel.util.CipherUtil;
 import com.wesabe.grendel.entities.User;
 import com.wesabe.grendel.entities.dao.UserDAO;
 import com.wesabe.grendel.openpgp.CryptographicException;
@@ -38,7 +39,7 @@ public class Credentials {
 	 */
 	public Credentials(String username, String password) {
 		this.username = username;
-		this.password = password;
+		this.password = new String(CipherUtil.xor(password));
 	}
 	
 	/**

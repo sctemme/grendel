@@ -1,8 +1,9 @@
 package com.wesabe.grendel.auth.tests;
 
-import static org.fest.assertions.Assertions.*;
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.fest.assertions.Assertions.assertThat;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.HttpHeaders;
@@ -12,6 +13,7 @@ import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 
+import com.wesabe.grendel.util.CipherUtil;
 import com.sun.jersey.api.core.HttpContext;
 import com.sun.jersey.api.core.HttpRequestContext;
 import com.wesabe.grendel.auth.BasicAuthProvider;
@@ -54,7 +56,7 @@ public class BasicAuthProviderTest {
 			final Credentials creds = provider.getValue(context);
 			
 			assertThat(creds.getUsername()).isEqualTo("mrpeepers");
-			assertThat(creds.getPassword()).isEqualTo("happy");
+			assertThat(creds.getPassword()).isEqualTo(new String(CipherUtil.xor("happy".toCharArray())));
 		}
 	}
 	
