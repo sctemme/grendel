@@ -47,6 +47,11 @@
 			<id>codahale-repo</id>
 			<url>http://repo.codahale.com</url>
 		</repository>
+		<repository>
+          <id>billfloat_repo</id>
+          <name>billfloat</name>
+          <url>http://billfloat.github.com/backend_services/repository/</url>
+      </repository>
     <repository>
 	<id>maven2-repository.dev.java.net</id>
         <url>http://download.java.net/maven/2/</url>
