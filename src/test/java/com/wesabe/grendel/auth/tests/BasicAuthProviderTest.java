@@ -13,6 +13,7 @@ import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 
+import com.wesabe.grendel.GrendelRunner.PassphraseHolder;
 import com.wesabe.grendel.util.CipherUtil;
 import com.sun.jersey.api.core.HttpContext;
 import com.sun.jersey.api.core.HttpRequestContext;
@@ -34,6 +35,7 @@ public class BasicAuthProviderTest {
 			when(context.getRequest()).thenReturn(request);
 			
 			this.provider = new BasicAuthProvider();
+			PassphraseHolder.setPassphrase(0, "".toCharArray());
 		}
 		
 		protected abstract String header();
@@ -56,7 +58,7 @@ public class BasicAuthProviderTest {
 			final Credentials creds = provider.getValue(context);
 			
 			assertThat(creds.getUsername()).isEqualTo("mrpeepers");
-			assertThat(creds.getPassword()).isEqualTo(new String(CipherUtil.xor("happy".toCharArray())));
+			assertThat(creds.getPassword()).isEqualTo("happy");
 		}
 	}
 	

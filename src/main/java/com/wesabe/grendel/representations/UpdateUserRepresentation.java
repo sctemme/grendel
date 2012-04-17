@@ -31,9 +31,11 @@ public class UpdateUserRepresentation implements Validatable {
 	
 	@JsonSetter("password")
 	public void setPassword(char[] password) {
-		password = CipherUtil.xor(password);
+		/*password = CipherUtil.xor(password);
 		this.password = Arrays.copyOf(password, password.length);
 		Arrays.fill(password, '\0');
+		*/
+	    this.password = password;
 	}
 	
 	@Override

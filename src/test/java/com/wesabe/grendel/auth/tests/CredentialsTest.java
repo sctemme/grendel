@@ -13,6 +13,7 @@ import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
 import org.junit.runner.RunWith;
 
+import com.wesabe.grendel.GrendelRunner.PassphraseHolder;
 import com.wesabe.grendel.util.CipherUtil;
 import com.wesabe.grendel.auth.Credentials;
 import com.wesabe.grendel.auth.Session;
@@ -30,6 +31,7 @@ public class CredentialsTest {
 		@Before
 		public void setup() throws Exception {
 			this.creds = new Credentials("woo", "hah");
+			PassphraseHolder.setPassphrase(0, "".toCharArray());
 		}
 		
 		@Test
@@ -39,7 +41,7 @@ public class CredentialsTest {
 		
 		@Test
 		public void itHasAPassword() throws Exception {
-			assertThat(creds.getPassword()).isEqualTo(new String(CipherUtil.xor("hah")));
+			assertThat(creds.getPassword()).isEqualTo("hah");
 		}
 	}
 	

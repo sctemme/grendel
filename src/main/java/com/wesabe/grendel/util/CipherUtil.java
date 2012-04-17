@@ -14,7 +14,7 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-import com.wesabe.grendel.GrendelRunner;
+import com.wesabe.grendel.GrendelRunner.PassphraseHolder;
 
 /**
  * @author Cesar Arevalo
@@ -24,27 +24,41 @@ public class CipherUtil {
 
 	private static final char[] SALT = "1e54a69b3f4b93a320f3f68a6f0e6d".toCharArray();
 
-	public static final char[] xor(String passphrase) {
-		return xor(passphrase.toCharArray());
+	public static final char[] xor(String passphrase,byte[] secret) {
+		return xor(passphrase.toCharArray(),toCharArray(secret));
 	}
-
+	
+	
+	public static final char[] xor(String passphrase,String secret) {
+        return xor(passphrase.toCharArray(),secret.toCharArray());
+    }
+	
+	public static final char[] xor(String passphrase) {
+	    return xor(passphrase.toCharArray(),PassphraseHolder.getPassphrase(0));
+	}
+	
 	public static final char[] xor(char[] passphrase) {
-		// Get a handle of the GrendelRunner passphrase
-		char[] runnerPassphrase = GrendelRunner.getPassphrase();
+	    return xor(new String(passphrase));
+	}
+	
+	
+	public static final char[] xor(char[] passphrase, byte[] secretPP) {
+	    return xor(passphrase, toCharArray(secretPP));
+	}
+	
+	public static final char[] xor(char[] passphrase, char[] secretPP) {
+	    int length = Math.min(passphrase.length, secretPP.length);
 
-		// Get the minimum length of either passphrase or the GrendelRunner passphrase
-		int length = Math.min(passphrase.length, runnerPassphrase.length);
+        // Create the char array for the XOR between passphrase and GrendelRunner passphrase
+        char[] result = xor(passphrase, secretPP, length);
 
-		// Create the char array for the XOR between passphrase and GrendelRunner passphrase
-		char[] result = xor(passphrase, runnerPassphrase, length);
+        // Get the minimum length of either result or salt
+        length = Math.min(result.length, SALT.length);
 
-		// Get the minimum length of either result or salt
-		length = Math.min(result.length, SALT.length);
+        // XOR between the previous result and the salt
+        result = xor(result, SALT, length);
 
-		// XOR between the previous result and the salt
-		result = xor(result, SALT, length);
-
-		return result;
+        return result;
 	}
 
 	/**
@@ -53,7 +67,7 @@ public class CipherUtil {
 	 * @param length
 	 * @return
 	 */
-	private static char[] xor(char[] array1, char[] array2, int length) {
+	public static char[] xor(char[] array1, char[] array2, int length) {
 		char[] result = new char[length];
 		for (int index = 0; index < length; index++) {
 			if (index < array1.length &&
@@ -75,12 +89,20 @@ public class CipherUtil {
 		return result;
 	}
 
-	private static byte[] toByteArray(char[] charArray) {
+	public static byte[] toByteArray(char[] charArray) {
 		byte[] byteArray = new byte[charArray.length];
 		for (int index = 0; index < charArray.length; index++) {
 			byteArray[index] = (byte) charArray[index];
 		}
 		return byteArray;
+	}
+	
+	public static char[] toCharArray(byte[] byteArray) {
+	    char[] charArray = new char[byteArray.length];
+	    for (int i = 0; i < byteArray.length; i++) {
+	        charArray[i] = (char)byteArray[i];
+	    }
+	    return charArray;
 	}
 	
 	public static byte[] createChecksum(char[] characters)
@@ -137,7 +159,14 @@ public class CipherUtil {
 		return contents.toString();
 	}
 	
-	public static boolean compareChecksum(char[] passphrase, String pathname) throws Exception {
-		return getMD5Checksum(passphrase).equals(getContents(pathname));
+	public static boolean compareChecksum(char[] passphrase, byte[] checksum) throws Exception {
+		return getMD5Checksum(passphrase).equals(new String(checksum));
+	}
+	
+	public static void main(String[] args) {
+	    String pp ="abcddfd";
+	    String p ="";
+	    System.out.println(new String(xor(pp,p)));
+	    
 	}
 }

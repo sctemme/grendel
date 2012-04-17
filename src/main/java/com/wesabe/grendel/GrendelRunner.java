@@ -3,15 +3,25 @@ package com.wesabe.grendel;
 import java.io.IOException;
 import java.security.KeyPair;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-
+import java.util.Map;
 import org.apache.commons.cli.CommandLine;
-
-import com.wesabe.grendel.util.CipherUtil;
+import org.hibernate.Session;
+import org.hibernate.cfg.AnnotationConfiguration;
 import com.codahale.shore.HelpCommand;
 import com.codahale.shore.Shore;
-import com.wesabe.grendel.Configuration;
+import com.google.inject.AbstractModule;
+import com.google.inject.Guice;
+import com.google.inject.Injector;
+import com.wesabe.grendel.entities.MD5Checksum;
+import com.wesabe.grendel.entities.Passphrase;
+import com.wesabe.grendel.entities.dao.MD5DAO;
+import com.wesabe.grendel.entities.dao.PassphraseDAO;
 import com.wesabe.grendel.openpgp.KeySetGenerator.KeyPairHolder;
+import com.wesabe.grendel.util.CipherUtil;
+import com.wideplay.warp.persist.PersistenceService;
+import com.wideplay.warp.persist.UnitOfWork;
 
 /**
  * The class from which we run Grendel.
@@ -42,10 +52,11 @@ public class GrendelRunner {
 			return;
 		}
 		
+		
 		/**
 		 * We have at least one valid command for running.
 		 */
-		GrendelConfiguration grendelConfiguration = new GrendelConfiguration(args);
+		final GrendelConfiguration grendelConfiguration = new GrendelConfiguration(args);
 		CommandLine cmdLine = grendelConfiguration.getCmdLine(args);
 		
 		/**
@@ -62,12 +73,30 @@ public class GrendelRunner {
 			Shore.run(new Configuration(), shoreArgs.toArray(new String[shoreArgs.size()]));
 			return;
 		}
+		
+		Injector injector =
+		    Guice.createInjector(PersistenceService.usingHibernate()
+		            .across(UnitOfWork.TRANSACTION)
+		            .buildModule(),
+		            new AbstractModule() {
+		        protected void configure() {
+		            bind(org.hibernate.cfg.Configuration.class)
+		            .toInstance(new AnnotationConfiguration()
+		            .addAnnotatedClass(Passphrase.class)
+		            .addAnnotatedClass(MD5Checksum.class)
+		            .setProperties(grendelConfiguration.getProperties()));
+		        }
+		    });
+	            
+		injector.getInstance(PersistenceService.class).start();
+		PassphraseDAO passphraseDao = injector.getInstance(PassphraseDAO.class);
 
 		/**
 		 * Are we running grendel as a service? If we are then we will receive
 		 * two passphrase arguments. Check these arguments and proceed if
 		 * successful.
 		 */
+		/*
 		if (isRunningAsService(cmdLine)) {
 			String filename = cmdLine.getOptionValue("file");
 
@@ -81,28 +110,41 @@ public class GrendelRunner {
 				throw new UnsupportedOperationException(PASSPHRASE_DO_NOT_MATCH);
 			}
 		}
+		*/
 		/**
 		 * We are not running grendel as a service. It is being run from the
 		 * command line.
 		 */
-		else {
-			confirmPassphrase(GrendelRunner.getPassphrase());
+		Session session = injector.getInstance(Session.class);
+		session.beginTransaction();
+		List<Passphrase>  passphrases = passphraseDao.findEnabledPassphrases();
+		session.getTransaction().commit();
+
+		for(Passphrase pp : passphrases) {
+		    confirmPassphrase(GrendelRunner.getPassphrase(pp));
+		    String activate = GrendelRunner.readActivate("activate this passphrase?, (Y/N) only one passphrase can be active:\n");
+		    pp.setActive(activate.equals("Y")? true : false);
 		}
+		savePassphrase(passphrases, passphraseDao, injector.getInstance(Session.class));
 
-		String pathname = grendelConfiguration.getProperties().getProperty(
-				"passphrase.file");
+		MD5DAO md5Dao = injector.getInstance(MD5DAO.class);
+		session = injector.getInstance(Session.class);
+		session.beginTransaction();
+		MD5Checksum md5Checksum = md5Dao.getById(0);
+		session.getTransaction().commit();
 
-		if (GrendelConfiguration
-				.isCommand(args, GrendelConfiguration.WRITE_MD5)) {
-			if (pathname != null && !pathname.isEmpty()) {
-				CipherUtil.writeToFileAsMD5Checksum(GrendelRunner
-						.getPassphrase(), pathname);
-			} else {
-				throw new UnsupportedOperationException(
-						"Please specify a passphrase.file in the properties file.");
-			}
-		} else if (CipherUtil.compareChecksum(GrendelRunner.getPassphrase(),
-				pathname)) {
+		if (GrendelConfiguration.isCommand(args, GrendelConfiguration.WRITE_MD5)) {
+		    if(md5Checksum == null) {
+		        md5Checksum = new MD5Checksum();
+		        md5Checksum.setId(0);
+		    }
+		    md5Checksum.setMD5(CipherUtil.getMD5Checksum(PassphraseHolder.getPassphrase()).getBytes());
+		    session = injector.getInstance(Session.class);
+		    session.beginTransaction();
+		    md5Dao.saveOrUpdate(md5Checksum);
+		    session.getTransaction().commit();
+				
+		} else if (CipherUtil.compareChecksum(PassphraseHolder.getPassphrase(), md5Checksum.getMD5())) {
 			KeyPair masterKeyPair = KeyPairHolder.MASTER_KEY_PAIR;
 			KeyPair subKeyPair = KeyPairHolder.SUB_KEY_PAIR;
 			if (masterKeyPair == null ||
@@ -113,14 +155,33 @@ public class GrendelRunner {
 			Shore.run(grendelConfiguration, shoreArgs);
 		} else {
 			throw new UnsupportedOperationException(
-					"The passphrase is incorrect.");
+					"Passphrase md5 checksum unmatched.");
 		}
 	}
 
-	private static void confirmPassphrase(char[] passphrase) {
-		char[] passphrase2 = PassphraseHolder
+	private static void savePassphrase(List<Passphrase> passphrases, PassphraseDAO passphraseDao, Session session)
+    {
+        int n = 0;
+        for(Passphrase pp : passphrases) {
+            if(pp.isActive()) {
+                n = n + 1;
+            }
+        }
+        if(n != 1) {
+            throw new RuntimeException("There must be exactly one passphrase that should be active");
+        }
+        session.beginTransaction();
+        for(Passphrase pp : passphrases) {
+            passphraseDao.saveOrUpdate(pp);
+        }
+        session.getTransaction().commit();
+        
+    }
+	
+    private static void confirmPassphrase(char[] passphrase) {
+		char[] read = PassphraseHolder
 				.readPassword("Confirm passphrase: ");
-		compare(passphrase, passphrase2);
+		compare(passphrase, read);
 	}
 
 	private static boolean compare(char[] passphrase1, char[] passphrase2) {
@@ -139,26 +200,14 @@ public class GrendelRunner {
 		}
 		return areEqual;
 	}
-
-	public static char[] getPassphrase() {
-		if (PassphraseHolder.PASSPHRASE == null) {
-			PassphraseHolder.PASSPHRASE = PassphraseHolder
-					.readPassword("Enter passphrase: ");
-		}
-		return PassphraseHolder.PASSPHRASE;
+	
+	public static char[] getPassphrase(Passphrase pp) {
+	    char[] secret = PassphraseHolder.readPassword("Enter passphrase for nickname " + pp.getNickName() +" : ");
+	    PassphraseHolder.setPassphrase(pp.getId(),secret);
+	    return secret;
+	    
 	}
-
-	private static boolean isRunningAsService(CommandLine cmdLine) {
-		if (cmdLine.hasOption("file")) {
-			return true;
-		} else {
-			return false;
-		}
-	}
-
-	private static void setPassphrase(char[] passphrase) {
-		PassphraseHolder.PASSPHRASE = passphrase;
-	}
+	
 
 	/**
 	 * Design for storing the passphrase.
@@ -168,8 +217,25 @@ public class GrendelRunner {
 	 *      href="http://en.wikipedia.org/wiki/Initialization_on_demand_holder_idiom">Initialization
 	 *      on demand holder idiom</a>
 	 */
-	private static class PassphraseHolder {
-		private static char[] PASSPHRASE;
+	public static class PassphraseHolder {
+	    
+		private static Map<Integer, char[]> PASSPHRASES = new HashMap<Integer,char[]>();
+		
+		public static void setPassphrase(int i, char[] passphrase) {
+		    PASSPHRASES.put(i, passphrase);
+		}
+		
+		public static char[] getPassphrase() {
+		    String s ="";
+		    for(char[] pp : PASSPHRASES.values()) {
+		        s += new String(pp);
+		    }
+		    return s.toCharArray();
+		}
+		
+		public static char[] getPassphrase(int i) {
+		    return PASSPHRASES.get(i);
+		}
 
 		/**
 		 * Read a password from the Console.
@@ -207,6 +273,10 @@ public class GrendelRunner {
 			}
 
 		}
+	}
+	
+	private static final String readActivate(String message) {
+	    return System.console().readLine(message);
 	}
 	
 	private static String usage(Configuration configuration, String template, String error) {

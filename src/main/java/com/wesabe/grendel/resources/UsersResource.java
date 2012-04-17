@@ -12,8 +12,13 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
 
+import org.joda.time.DateTime;
+
 import com.google.inject.Inject;
+import com.wesabe.grendel.GrendelRunner.PassphraseHolder;
+import com.wesabe.grendel.entities.Passphrase;
 import com.wesabe.grendel.entities.User;
+import com.wesabe.grendel.entities.dao.PassphraseDAO;
 import com.wesabe.grendel.entities.dao.UserDAO;
 import com.wesabe.grendel.openpgp.CryptographicException;
 import com.wesabe.grendel.openpgp.KeySet;
@@ -21,6 +26,7 @@ import com.wesabe.grendel.openpgp.KeySetGenerator;
 import com.wesabe.grendel.representations.CreateUserRepresentation;
 import com.wesabe.grendel.representations.UserListRepresentation;
 import com.wesabe.grendel.representations.ValidationException;
+import com.wesabe.grendel.util.CipherUtil;
 import com.wideplay.warp.persist.Transactional;
 
 /**
@@ -34,11 +40,13 @@ import com.wideplay.warp.persist.Transactional;
 public class UsersResource {
 	private final KeySetGenerator generator;
 	private final UserDAO userDAO;
+	private final PassphraseDAO ppDAO;
 	
 	@Inject
-	public UsersResource(KeySetGenerator generator, UserDAO userDAO) {
+	public UsersResource(KeySetGenerator generator, UserDAO userDAO, PassphraseDAO ppDao) {
 		this.generator = generator;
 		this.userDAO = userDAO;
+		this.ppDAO = ppDao;
 	}
 	
 	/**
@@ -71,9 +79,15 @@ public class UsersResource {
 			e.addReason("username is already taken");
 			throw e;
 		}
+		
+		Passphrase pp = ppDAO.findActivePassphrase();
 
-		final KeySet keySet = generator.generate(request.getId(), request.getPassword());
-		final User user = userDAO.saveOrUpdate(new User(keySet));
+		String encodedPassword = new String(CipherUtil.xor(request.getPassword(), PassphraseHolder.getPassphrase(pp.getId())));
+		final KeySet keySet = generator.generate(request.getId(), encodedPassword.toCharArray());
+		User u = new User(keySet);
+		u.setPPId(pp.getId());
+		u.setPpLastModifiedAt(new DateTime());
+		final User user = userDAO.saveOrUpdate(u);
 		
 		request.sanitize();
 		

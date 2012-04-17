@@ -95,7 +95,7 @@ public class UserResource {
 		
 		user.setKeySet(
 			keySet.relock(
-				credentials.getPassword().toCharArray(),
+				credentials.getEncodedPassword(),
 				entity.getPassword(),
 				randomProvider.get()
 			)

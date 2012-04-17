@@ -40,6 +40,15 @@ public class UserDAO extends AbstractDAO<User> {
 		return list(namedQuery("com.wesabe.grendel.entities.User.All"));
 	}
 	
+	public List<User> findUnconvertedUser(int pp_id) {
+	    return list(namedQuery("com.wesabe.grendel.entities.User.selectUserRange").
+	            setInteger("enabled_pp", pp_id).setMaxResults(200));
+	}
+	
+	public int fundUnconvertedUserCount(int pp_id) {
+	    return (Integer)namedQuery("com.wesabe.grendel.entities.User.unconvertedUserCount").setInteger("enabled_pp", pp_id).uniqueResult();
+	}
+	
 	/**
 	 * Writes the {@link User} to the database.
 	 * 

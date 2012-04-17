@@ -17,7 +17,6 @@ import org.bouncycastle.openpgp.PGPSignatureSubpacketGenerator;
 import org.bouncycastle.openpgp.PGPSignatureSubpacketVector;
 import org.joda.time.DateTime;
 
-import com.wesabe.grendel.util.CipherUtil;
 import com.google.inject.Inject;
 import com.google.inject.internal.ImmutableList;
 import com.wesabe.grendel.util.IntegerEquivalents;
@@ -107,6 +106,7 @@ public class KeySetGenerator {
 	 * @return a keyset for the user
 	 * @throws CryptographicException if there was an error generating the keyset
 	 */
+	
 	public KeySet generate(String userId, char[] passphrase) throws CryptographicException {
 		try {
 			final PGPKeyPair masterPGPKeyPair = new PGPKeyPair(
@@ -120,7 +120,7 @@ public class KeySetGenerator {
 				masterPGPKeyPair,
 				userId,
 				SymmetricAlgorithm.DEFAULT.toInteger(),
-				CipherUtil.xor(passphrase),
+				passphrase,
 				true, // use SHA-1 instead of MD5
 				generateMasterKeySettings(),
 				null, // don't store any key settings unhashed

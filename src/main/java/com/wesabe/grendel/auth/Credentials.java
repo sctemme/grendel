@@ -5,11 +5,12 @@ import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
-import com.wesabe.grendel.util.CipherUtil;
+import com.wesabe.grendel.GrendelRunner.PassphraseHolder;
 import com.wesabe.grendel.entities.User;
 import com.wesabe.grendel.entities.dao.UserDAO;
 import com.wesabe.grendel.openpgp.CryptographicException;
 import com.wesabe.grendel.openpgp.UnlockedKeySet;
+import com.wesabe.grendel.util.CipherUtil;
 
 /**
  * A set of Basic authentication credentials.
@@ -30,6 +31,11 @@ public class Credentials {
 	
 	private final String username;
 	private final String password;
+	private char[] encodedPassword;
+	
+	public char[] getEncodedPassword() {
+	    return encodedPassword;
+	}
 	
 	/**
 	 * Creates a new set of credentials.
@@ -39,7 +45,8 @@ public class Credentials {
 	 */
 	public Credentials(String username, String password) {
 		this.username = username;
-		this.password = new String(CipherUtil.xor(password));
+		//this.password = new String(CipherUtil.xor(password));
+		this.password = password;
 	}
 	
 	/**
@@ -68,9 +75,11 @@ public class Credentials {
 	 */
 	public Session buildSession(UserDAO userDAO) throws WebApplicationException {
 		final User user = userDAO.findById(username);
+		
 		if (user != null) {
 			try {
-				final UnlockedKeySet keySet = user.getKeySet().unlock(password.toCharArray());
+			    encodedPassword = CipherUtil.xor(password, new String(PassphraseHolder.getPassphrase(user.getPPId())));
+				final UnlockedKeySet keySet = user.getKeySet().unlock(encodedPassword);
 				return new Session(user, keySet);
 			} catch (CryptographicException e) {
 				throw new WebApplicationException(CHALLENGE);

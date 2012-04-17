@@ -1,22 +1,37 @@
 package com.wesabe.grendel.entities;
 
-import static com.google.common.base.Objects.*;
+import static com.google.common.base.Objects.equal;
 
 import java.io.Serializable;
 import java.util.Set;
 
-import javax.persistence.*;
-
+import javax.persistence.CascadeType;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.FetchType;
+import javax.persistence.Id;
+import javax.persistence.JoinColumn;
+import javax.persistence.JoinTable;
+import javax.persistence.Lob;
+import javax.persistence.ManyToMany;
+import javax.persistence.NamedQueries;
+import javax.persistence.NamedQuery;
+import javax.persistence.OneToMany;
+import javax.persistence.Table;
+import javax.persistence.Transient;
+import javax.persistence.Version;
 import org.hibernate.annotations.ForeignKey;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 import org.hibernate.annotations.Type;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
-
 import com.google.common.collect.Sets;
+import com.wesabe.grendel.GrendelRunner.PassphraseHolder;
 import com.wesabe.grendel.openpgp.CryptographicException;
 import com.wesabe.grendel.openpgp.KeySet;
+import com.wesabe.grendel.openpgp.UnlockedKeySet;
+import com.wesabe.grendel.util.CipherUtil;
 import com.wesabe.grendel.util.HashCode;
 
 /**
@@ -34,7 +49,14 @@ import com.wesabe.grendel.util.HashCode;
 	@NamedQuery(
 		name="com.wesabe.grendel.entities.User.All",
 		query="SELECT u FROM User AS u ORDER BY u.id"
-	)
+	),
+	
+	@NamedQuery(name ="com.wesabe.grendel.entities.User.unconvertedUserCount",
+	        query = "SELECT COUNT(*) FROM User AS u WHERE u.pp_id != :enabled_pp"),
+    
+	@NamedQuery(name ="com.wesabe.grendel.entities.User.selectUserRange",
+	        query ="SELECT u FROM User AS u WHERE u.pp_id != :enabled_pp")
+
 })
 public class User implements Serializable {
 	private static final long serialVersionUID = -8270919660085011028L;
@@ -47,6 +69,12 @@ public class User implements Serializable {
 	@Lob
 	private byte[] encodedKeySet;
 	
+	
+	@Column(name="pp_id", nullable=false)
+    private int pp_id;
+    
+	
+	
 	@Transient
 	private KeySet keySet = null;
 	
@@ -57,6 +85,10 @@ public class User implements Serializable {
 	@Column(name="modified_at", nullable=false)
 	@Type(type="org.joda.time.contrib.hibernate.PersistentDateTime")
 	private DateTime modifiedAt;
+	
+	@Column(name="pp_modified_at")
+    @Type(type="org.joda.time.contrib.hibernate.PersistentDateTime")
+    private DateTime ppLastModifiedAt;
 	
 	// FIXME coda@wesabe.com -- Dec 27, 2009: User#documents double-loads document primary keys.
 	// This may be a bug in Hibernate, but the SQL this generates produces
@@ -142,6 +174,11 @@ public class User implements Serializable {
 		return keySet;
 	}
 	
+	public UnlockedKeySet getUnlockedKeySet(String password) throws CryptographicException {
+	    char[] encodedPassword = CipherUtil.xor(password, new String(PassphraseHolder.getPassphrase(getPPId())));
+        return  getKeySet().unlock(encodedPassword);
+	}
+	
 	/**
 	 * Replaces the user's {@link KeySet} with another.
 	 * 
@@ -151,6 +188,14 @@ public class User implements Serializable {
 		this.keySet = keySet;
 		this.id = keySet.getUserID();
 		this.encodedKeySet = keySet.getEncoded();
+	}
+	
+	public DateTime getPpLastModifiedAt() {
+	    return toUTC(ppLastModifiedAt);
+	}
+	
+	public void setPpLastModifiedAt(DateTime ppLastModifiedAt) {
+	    this.ppLastModifiedAt = toUTC(ppLastModifiedAt);
 	}
 	
 	/**
@@ -222,6 +267,16 @@ public class User implements Serializable {
 				equal(createdAt, that.createdAt) && equal(modifiedAt, that.modifiedAt) &&
 				equal(encodedKeySet, that.encodedKeySet);
 	}
+	
+	
+	public int getPPId() {
+	    return pp_id;
+	}
+	
+	public void setPPId(int id) {
+	    this.pp_id = id;
+	}
+	
 	
 	@Override
 	public String toString() {
