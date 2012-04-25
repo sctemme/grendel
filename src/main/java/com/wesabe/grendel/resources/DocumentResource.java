@@ -1,6 +1,7 @@
 package com.wesabe.grendel.resources;
 
 import java.security.SecureRandom;
+import java.util.Set;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
@@ -25,12 +26,20 @@ import org.joda.time.DateTimeZone;
 
 import com.google.inject.Inject;
 import com.google.inject.Provider;
+import com.wesabe.grendel.GrendelRunner.PassphraseHolder;
 import com.wesabe.grendel.auth.Credentials;
 import com.wesabe.grendel.auth.Session;
 import com.wesabe.grendel.entities.Document;
+import com.wesabe.grendel.entities.Passphrase;
+import com.wesabe.grendel.entities.User;
 import com.wesabe.grendel.entities.dao.DocumentDAO;
+import com.wesabe.grendel.entities.dao.PassphraseDAO;
 import com.wesabe.grendel.entities.dao.UserDAO;
 import com.wesabe.grendel.openpgp.CryptographicException;
+import com.wesabe.grendel.openpgp.KeySet;
+import com.wesabe.grendel.openpgp.KeySetGenerator;
+import com.wesabe.grendel.openpgp.UnlockedKeySet;
+import com.wesabe.grendel.util.CipherUtil;
 import com.wideplay.warp.persist.Transactional;
 
 /**
@@ -53,13 +62,17 @@ public class DocumentResource {
 	private final Provider<SecureRandom> randomProvider;
 	private final UserDAO userDAO;
 	private final DocumentDAO documentDAO;
+	private final PassphraseDAO ppDAO;
+	private final KeySetGenerator generator;
 	
 	@Inject
 	public DocumentResource(Provider<SecureRandom> randomProvider, UserDAO userDAO,
-		DocumentDAO documentDAO) {
+		DocumentDAO documentDAO, PassphraseDAO ppDAO, KeySetGenerator generator) {
 		this.randomProvider = randomProvider;
 		this.userDAO = userDAO;
 		this.documentDAO = documentDAO;
+		this.ppDAO = ppDAO;
+		this.generator = generator;
 	}
 	
 	/**
@@ -70,6 +83,7 @@ public class DocumentResource {
 	 * @throws CryptographicException
 	 */
 	@GET
+	@Transactional
 	public Response show(@Context Request request, @Context Credentials credentials,
 		@PathParam("user_id") String userId, @PathParam("name") String name) throws CryptographicException {
 		
@@ -84,6 +98,11 @@ public class DocumentResource {
 		checkPreconditions(request, doc);
 		
 		final byte[] body = doc.decryptBody(session.getKeySet());
+		User user = session.getUser();
+        Passphrase activePP = ppDAO.findActivePassphrase();
+        if(user.getPPId() != activePP.getId()) {
+            reencrypt(user, activePP, credentials.getPassword());
+        }
 		return Response.ok()
 				.entity(body)
 				.type(doc.getContentType())
@@ -110,7 +129,6 @@ public class DocumentResource {
 		}
 		
 		checkPreconditions(request, doc);
-		
 		documentDAO.delete(doc);
 		return Response.noContent().build();
 	}
@@ -170,5 +188,22 @@ public class DocumentResource {
 			throw new WebApplicationException(response.build());
 		}
 	}
+	
+	private void reencrypt(User user, Passphrase enabledPP, String password) throws CryptographicException{
+        UnlockedKeySet oldunlockedKeySet = user.getUnlockedKeySet(password);
+        Set<Document> documents = user.getDocuments();
+        user.setPPId(enabledPP.getId());
+        user.setPpLastModifiedAt(new DateTime(DateTimeZone.UTC));
+        char[] newpp = CipherUtil.xor(password.toCharArray(), PassphraseHolder.getPassphrase(enabledPP.getId()));
+        KeySet newKeyset = generator.generate(user.getId(),newpp);
+        UnlockedKeySet newunlockedKeySet = newKeyset.unlock(newpp);
+        for(Document doc : documents) {
+               byte[] body = doc.decryptBody(oldunlockedKeySet);
+               doc.encryptAndSetBody(newunlockedKeySet, randomProvider.get(), body);
+               doc.setModifiedAt(new DateTime(DateTimeZone.UTC));
+        }
+        user.setKeySet(newKeyset);
+        userDAO.saveOrUpdate(user);
+    }
 	
 }

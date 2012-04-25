@@ -37,9 +37,12 @@ import com.google.inject.Provider;
 import com.wesabe.grendel.auth.Credentials;
 import com.wesabe.grendel.auth.Session;
 import com.wesabe.grendel.entities.Document;
+import com.wesabe.grendel.entities.Passphrase;
 import com.wesabe.grendel.entities.User;
 import com.wesabe.grendel.entities.dao.DocumentDAO;
+import com.wesabe.grendel.entities.dao.PassphraseDAO;
 import com.wesabe.grendel.entities.dao.UserDAO;
+import com.wesabe.grendel.openpgp.KeySetGenerator;
 import com.wesabe.grendel.openpgp.UnlockedKeySet;
 import com.wesabe.grendel.resources.DocumentResource;
 
@@ -58,6 +61,8 @@ public class DocumentResourceTest {
 		protected Document document;
 		protected Request request;
 		protected DateTime modifiedAt, now;
+		protected PassphraseDAO ppDAO;
+		private KeySetGenerator generator;
 		
 		public void setup() throws Exception {
 			this.modifiedAt = new DateTime(2009, 12, 29, 8, 42, 32, 00, DateTimeZone.UTC);
@@ -73,6 +78,7 @@ public class DocumentResourceTest {
 			
 			this.user = mock(User.class);
 			when(user.getId()).thenReturn("bob");
+			when(user.getPPId()).thenReturn(0);
 			
 			this.keySet = mock(UnlockedKeySet.class);
 			
@@ -94,10 +100,14 @@ public class DocumentResourceTest {
 			
 			this.credentials = mock(Credentials.class);
 			when(credentials.buildSession(userDAO, "bob")).thenReturn(session);
+			this.ppDAO = mock(PassphraseDAO.class);
+			Passphrase dummyPP = new Passphrase();
+			when(ppDAO.findActivePassphrase()).thenReturn(dummyPP);
 			
 			this.request = mock(Request.class);
+			this.generator = mock(KeySetGenerator.class);
 			
-			this.resource = new DocumentResource(randomProvider, userDAO, documentDAO);
+			this.resource = new DocumentResource(randomProvider, userDAO, documentDAO, ppDAO,generator);
 		}
 	}
 	
