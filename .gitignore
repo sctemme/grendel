@@ -1,6 +1,7 @@
+*.request.log
 .classpath
+.idea
 .project
 .settings
-target
 development.properties
-.idea
+target
